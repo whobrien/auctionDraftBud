@@ -1,0 +1,11 @@
+Explanation:
+
+- **PyQt5**: This is the main library required to run the GUI of your application. The version number specified (e.g., `5.15.7`) ensures that your application uses a consistent version across different environments.
+
+If your project is very basic and doesn't require any other external libraries, this single line might be sufficient. However, if you use any other libraries or dependencies, you should include them in the `requirements.txt` file as well. 
+
+To install the required packages from the `requirements.txt` file, users can run:
+
+```bash
+pip install -r requirements.txt
+```
