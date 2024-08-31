@@ -1,6 +1,6 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QLineEdit, QTabWidget, QTextEdit
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QComboBox, QPushButton, QLineEdit, QTabWidget, QTextEdit, QGroupBox, QCheckBox
 from draft_logic import Draft, Owner, Player, load_players_from_csv
 
 class DraftApp(QWidget):
@@ -55,6 +55,10 @@ class DraftApp(QWidget):
         self.position_filter.currentIndexChanged.connect(self.filter_players)
         layout.addWidget(self.position_filter)
 
+        # # Position Filter
+        # self.position_group_box = self.create_checkbox_group("Position", sorted(set(player.position for player in self.draft.players)))
+        # layout.addWidget(self.position_group_box)
+
         # Tier filter
         self.tier_filter = QComboBox()
         self.tier_filter.addItem("All Tiers")
@@ -71,10 +75,24 @@ class DraftApp(QWidget):
         self.tad_filter.currentIndexChanged.connect(self.filter_players)
         layout.addWidget(self.tad_filter)
 
+        # # Player dropdown
+        # self.player_dropdown = QLineEdit()  # Replaced dropdown with a line edit for manual entry
+        # layout.addWidget(self.player_dropdown)
+
         # Player dropdown
         self.player_dropdown = QComboBox()
         self.update_player_dropdown()
         layout.addWidget(self.player_dropdown)
+
+        # Manual player entry
+        self.manual_player_entry = QLineEdit()
+        self.manual_player_entry.setPlaceholderText("Enter player name if not in dropdown")
+        layout.addWidget(self.manual_player_entry)
+
+        # Manual player position entry
+        self.manual_player_entry = QLineEdit()
+        self.manual_player_entry.setPlaceholderText("Enter player position")
+        layout.addWidget(self.manual_player_entry)
 
         # Player nomination dropdown
         #self.player_dropdown = QComboBox()
@@ -109,27 +127,40 @@ class DraftApp(QWidget):
 
         self.draft_tab.setLayout(layout)
 
+    def create_checkbox_group(self, title, options):
+        group_box = QGroupBox(title)
+        layout = QVBoxLayout()
+        self.checkboxes = {}
+        for option in options:
+            checkbox = QCheckBox(option)
+            layout.addWidget(checkbox)
+            self.checkboxes[option] = checkbox
+        group_box.setLayout(layout)
+        return group_box
+
     def update_player_dropdown(self):
         # Clear current dropdown items
         self.player_dropdown.clear()
 
-        # Get selected position and tier filters
+        # Get selected position, tier and, Tad filters
         selected_position = self.position_filter.currentText()
+        #selected_positions = [pos for pos, checkbox in self.position_checkboxes.items() if checkbox.isChecked()]
         selected_tier = self.tier_filter.currentText()
         selected_tad = self.tad_filter.currentText()
 
         # Filter players based on selected position, tier, tad
         filtered_players = [
             player.name for player in self.draft.players
-            if (selected_position == "All Positions" or player.position == selected_position) and
-               (selected_tier == "All Tiers" or str(player.tier) == selected_tier) and
-                (selected_tad == "All TADs" or str(player.tad) == selected_tad)
+            if (selected_position == "All Positions" or player.position == selected_position) and 
+                (selected_tier == "All Tiers" or str(player.tier) == selected_tier) and
+                    (selected_tad == "All TADs" or str(player.tad) == selected_tad)
         ]
 
         # Sort the filtered players alphabetically
-        filtered_players.sort()
+        #filtered_players.sort()
 
         # Add filtered players to the dropdown
+        self.player_dropdown.clear()
         self.player_dropdown.addItems(filtered_players)
 
     def filter_players(self):
@@ -236,6 +267,25 @@ class DraftApp(QWidget):
         player_name = self.player_dropdown.currentText()
         if player_name == "Select Player":
             return
+        
+        # Get the player name from the dropdown or manual entry
+        player_name = self.player_dropdown.currentText()
+        manual_name = self.manual_player_entry.text().strip()
+        manual_position = self.manual_player_entry.text().strip()
+
+        if manual_name:
+            player_name = manual_name  # Use the manually entered name
+
+            # Add the new player to the draft
+            new_player = Player(name=manual_name, position=manual_position, team="Unknown", tier=0, tad="")
+            self.draft.players.append(new_player)
+            
+            # Also add to the dropdown for future use
+            self.player_dropdown.addItem(manual_name)
+        
+        if not player_name or player_name == "Select Player":
+            print("No player selected")
+            return
 
         # Update the nomination info
         current_owner = self.draft.next_owner()
@@ -251,6 +301,8 @@ class DraftApp(QWidget):
     def draftPlayer(self):
         # Logic to draft a player
         player_name = self.player_dropdown.currentText()
+        manual_name = self.manual_player_entry.text().strip()
+        manual_position = self.manual_player_entry.text().strip()
         owner_name = self.buyer_dropdown.currentText()
         price = self.price_input.text()
 
@@ -264,6 +316,9 @@ class DraftApp(QWidget):
             print("No player selected")
             return
 
+        if manual_name:
+            player_name = manual_name # Use the manually entered name
+
         if not owner_name or owner_name == "Select Owner":
             print("No owner selected")
             return
@@ -275,13 +330,28 @@ class DraftApp(QWidget):
         # Get the player object
         player = self.draft.get_player_by_name(player_name)
 
+        # Convert price to an integer
+        price = int(price)
+
+        # Handle the case where the player was manually entered
+        if manual_name:
+            # find or creat the player in the draft
+            player = next((p for p in self.draft.players if p.name == player_name), None)
+            if not player:
+                player = Player(name=player_name, position=manual_position, team="Unknown", tier=0, tad="")
+                self.draft.players.append(player)
+        else:
+            #get the player object from the dropdown menu
+            player = self.draft.get_player_by_name(player_name)
+            # Remove the drafted player from the dropdown menu if they were in it
+            index = self.player_dropdown.findText(player_name)
+            if index != -1:
+                self.player_dropdown.removeItem(index)
+
         # Check if the player has a nominating owner
         if not player.nominating_owner:
             print(f"Player {player_name} cannot be drafted because they have no nominating owner.")
             return
-
-        # Convert price to an integer
-        price = int(price)
 
         # Draft the player using the Draft class
         try:
@@ -291,11 +361,6 @@ class DraftApp(QWidget):
         except ValueError as e:
             print(f"Error drafting player: {e}")
             return
-        
-        # Remove the drafted player from the dropdown menu
-        index = self.player_dropdown.findText(player_name)
-        if index != -1:
-            self.player_dropdown.removeItem(index)
 
         # Check if the owner has reached 16 players
         owner = self.draft.get_owner_by_name(owner_name)
@@ -320,8 +385,9 @@ class DraftApp(QWidget):
         self.updateOwnersTab()
         self.updateMyTeamTab()
 
-        # Clear the price input for the next entry
+        # Clear the price and name input for the next entry
         self.price_input.setText("1")
+        self.manual_player_entry.clear()
 
     def updateOwnersTab(self):
         # Update the owners tab with current information
